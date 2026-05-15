@@ -9,15 +9,17 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  stage-charon-artifacts.sh --render-dir <path> --host-name <name> --approval-file <path> --source-dir <path> [--cluster-lock-file <path>] [--enr-file <path>] [--pubkeys-file <path>] [--force] [--execute]
+  stage-charon-artifacts.sh --runtime-dir <path> --approval-file <path> --source-dir <path> [--host-name <name>] [--cluster-lock-file <path>] [--enr-file <path>] [--pubkeys-file <path>] [--force] [--execute]
+  stage-charon-artifacts.sh --render-dir <path> --host-name <name> --approval-file <path> --source-dir <path> [--cluster-lock-file <path>] [--enr-file <path>] [--pubkeys-file <path>] [--force] [--execute] [--allow-render-dir-execute]
 
 Examples:
-  ./stage-charon-artifacts.sh --render-dir /tmp/cdvn-bundle --host-name operator-1 --approval-file ./charon-artifact-approval.example.env --source-dir /secure/approved/operator-1
-  ./stage-charon-artifacts.sh --render-dir /tmp/cdvn-bundle --host-name operator-1 --approval-file ./approval.env --source-dir /secure/approved/operator-1 --execute
+  ./stage-charon-artifacts.sh --runtime-dir /opt/obol/cluster-a --approval-file ./charon-artifact-approval.env --source-dir /var/lib/eth-treasury-operator-artifacts/cluster-a --execute
+  ./stage-charon-artifacts.sh --render-dir /tmp/cdvn-bundle --host-name operator-1 --approval-file ./charon-artifact-approval.example.env --source-dir /tmp/cdvn-local-approved/operator-1
 EOF
 }
 
 RENDER_DIR=""
+RUNTIME_DIR=""
 HOST_NAME=""
 APPROVAL_FILE=""
 SOURCE_DIR=""
@@ -26,11 +28,17 @@ ENR_FILE=""
 PUBKEYS_FILE=""
 FORCE=0
 EXECUTE=0
+ALLOW_RENDER_DIR_EXECUTE=0
+ALLOW_SENSITIVE_SOURCE_DIR=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --render-dir)
       RENDER_DIR="${2:-}"
+      shift 2
+      ;;
+    --runtime-dir)
+      RUNTIME_DIR="${2:-}"
       shift 2
       ;;
     --host-name)
@@ -65,6 +73,14 @@ while [ "$#" -gt 0 ]; do
       EXECUTE=1
       shift
       ;;
+    --allow-render-dir-execute)
+      ALLOW_RENDER_DIR_EXECUTE=1
+      shift
+      ;;
+    --allow-sensitive-source-dir)
+      ALLOW_SENSITIVE_SOURCE_DIR=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -77,17 +93,49 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-[ -n "${RENDER_DIR}" ] || { usage >&2; exit 1; }
-[ -n "${HOST_NAME}" ] || { usage >&2; exit 1; }
+[ -n "${RENDER_DIR}" ] || [ -n "${RUNTIME_DIR}" ] || { usage >&2; exit 1; }
+if [ -n "${RENDER_DIR}" ] && [ -n "${RUNTIME_DIR}" ]; then
+  echo "Use either --render-dir or --runtime-dir, not both." >&2
+  exit 1
+fi
 [ -n "${APPROVAL_FILE}" ] || { usage >&2; exit 1; }
 [ -n "${SOURCE_DIR}" ] || { usage >&2; exit 1; }
 [ -d "${SOURCE_DIR}" ] || { echo "Source dir not found: ${SOURCE_DIR}" >&2; exit 1; }
 
-require_rendered_host "${RENDER_DIR}" "${HOST_NAME}"
+TARGET_MODE="runtime-dir"
+if [ -n "${RENDER_DIR}" ]; then
+  [ -n "${HOST_NAME}" ] || { echo "--host-name is required with --render-dir." >&2; usage >&2; exit 1; }
+  TARGET_MODE="render-dir"
+  require_rendered_host "${RENDER_DIR}" "${HOST_NAME}"
+  HOST_RUNTIME_DIR="$(render_host_runtime_dir "${RENDER_DIR}" "${HOST_NAME}")"
+  METADATA_FILE="$(render_host_metadata_file "${RENDER_DIR}" "${HOST_NAME}")"
+  ENV_FILE="$(render_host_env_file "${RENDER_DIR}" "${HOST_NAME}")"
+else
+  [ -d "${RUNTIME_DIR}" ] || { echo "Runtime dir not found: ${RUNTIME_DIR}" >&2; exit 1; }
+  HOST_RUNTIME_DIR="${RUNTIME_DIR}"
+  METADATA_FILE="${HOST_RUNTIME_DIR}/render-metadata.env"
+  ENV_FILE="${HOST_RUNTIME_DIR}/.env"
+fi
 
-METADATA_FILE="$(render_host_metadata_file "${RENDER_DIR}" "${HOST_NAME}")"
-ENV_FILE="$(render_host_env_file "${RENDER_DIR}" "${HOST_NAME}")"
-HOST_RUNTIME_DIR="$(render_host_runtime_dir "${RENDER_DIR}" "${HOST_NAME}")"
+[ -f "${METADATA_FILE}" ] || { echo "Render metadata not found: ${METADATA_FILE}" >&2; exit 1; }
+[ -f "${ENV_FILE}" ] || { echo "Runtime env not found: ${ENV_FILE}" >&2; exit 1; }
+
+METADATA_HOST_NAME="$(read_env_value "${METADATA_FILE}" "HOST_NAME")"
+if [ -z "${HOST_NAME}" ]; then
+  HOST_NAME="${METADATA_HOST_NAME}"
+fi
+[ -n "${HOST_NAME}" ] || { echo "Host name is required or must be present in render-metadata.env." >&2; exit 1; }
+if [ -n "${METADATA_HOST_NAME}" ] && [ "${METADATA_HOST_NAME}" != "${HOST_NAME}" ]; then
+  echo "Host name mismatch: ${HOST_NAME} != metadata ${METADATA_HOST_NAME}" >&2
+  exit 1
+fi
+
+if [ "${TARGET_MODE}" = "render-dir" ] && [ "${EXECUTE}" -eq 1 ] && [ "${ALLOW_RENDER_DIR_EXECUTE}" -ne 1 ]; then
+  echo "Refusing to stage operator artifacts into a render bundle." >&2
+  echo "Run this on the operator host with --runtime-dir, or pass --allow-render-dir-execute only for local tests." >&2
+  exit 1
+fi
+
 TARGET_CHARON_DIR="${HOST_RUNTIME_DIR}/.charon"
 TARGET_STAGE_ENV="${HOST_RUNTIME_DIR}/charon-artifacts-staging.env"
 TARGET_PUBKEYS_FILE="${HOST_RUNTIME_DIR}/validator-pubkeys.txt"
@@ -110,6 +158,20 @@ if [ -z "${PUBKEYS_FILE}" ] && [ -f "${SOURCE_DIR}/validator-pubkeys.txt" ]; the
 fi
 if [ -z "${PUBKEYS_FILE}" ] && [ -f "${SOURCE_CHARON_DIR}/validator-pubkeys.txt" ]; then
   PUBKEYS_FILE="${SOURCE_CHARON_DIR}/validator-pubkeys.txt"
+fi
+
+SENSITIVE_SOURCE_PATH="$(find "${SOURCE_DIR}" \( \
+  -name validator_keys \
+  -o -name 'keystore-*.json' \
+  -o -iname '*mnemonic*' \
+  -o -iname '*seed*' \
+  -o -iname '*password*' \
+  -o -iname '*keyshare*' \
+\) -print -quit)"
+if [ -n "${SENSITIVE_SOURCE_PATH}" ] && [ "${ALLOW_SENSITIVE_SOURCE_DIR}" -ne 1 ]; then
+  echo "Sensitive source path detected: ${SENSITIVE_SOURCE_PATH}" >&2
+  echo "Use a sanitized operator-local source dir containing only cluster-lock.json, charon-enr-private-key, and optional validator-pubkeys.txt." >&2
+  exit 1
 fi
 
 [ -n "${CLUSTER_LOCK_FILE}" ] || { echo "cluster-lock.json not found under ${SOURCE_DIR}. Pass --cluster-lock-file if needed." >&2; exit 1; }
@@ -183,11 +245,6 @@ if [ "${FORCE}" -ne 1 ]; then
   fi
 fi
 
-IGNORED_SENSITIVE_NOTE=""
-if [ -d "${SOURCE_CHARON_DIR}/validator_keys" ]; then
-  IGNORED_SENSITIVE_NOTE="validator_keys/ is present in the source and will be ignored."
-fi
-
 STAGED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 CLUSTER_LOCK_SHA256="$(sha256_file "${CLUSTER_LOCK_FILE}")"
 ENR_SHA256="$(sha256_file "${ENR_FILE}")"
@@ -202,6 +259,7 @@ fi
 echo "Stage charon artifacts host: ${HOST_NAME}"
 echo "Cluster: ${CLUSTER_NAME}"
 echo "Mode: $([ "${EXECUTE}" -eq 1 ] && printf 'execute' || printf 'dry-run')"
+echo "Target mode: ${TARGET_MODE}"
 echo "Source dir: ${SOURCE_DIR}"
 echo "Source charon dir: ${SOURCE_CHARON_DIR}"
 echo "Target runtime: ${HOST_RUNTIME_DIR}"
@@ -211,9 +269,6 @@ echo "- ${ENR_FILE} -> ${TARGET_ENR_FILE}"
 if [ -n "${PUBKEYS_CSV}" ]; then
   echo "- ${PUBKEYS_FILE} -> ${TARGET_PUBKEYS_FILE}"
   echo "- WEB3SIGNER_PUBLIC_KEYS updated from ${PUBKEY_COUNT} pubkeys"
-fi
-if [ -n "${IGNORED_SENSITIVE_NOTE}" ]; then
-  echo "Ignored sensitive input: ${IGNORED_SENSITIVE_NOTE}"
 fi
 if [ "${CONFLICT_COUNT}" -gt 0 ]; then
   echo "Existing staged files detected: ${CONFLICT_COUNT} path(s) would require --force on execute."
@@ -258,7 +313,7 @@ ENR_SHA256=${ENR_SHA256}
 PUBKEYS_FILE=${PUBKEYS_FILE}
 PUBKEYS_SHA256=${PUBKEYS_SHA256}
 PUBKEY_COUNT=${PUBKEY_COUNT}
-IGNORED_SENSITIVE_PATH=validator_keys
+TARGET_MODE=${TARGET_MODE}
 EOF
 
 echo "Staged charon artifacts into ${TARGET_CHARON_DIR}"

@@ -16,52 +16,20 @@
 
 ## 문서 구성
 
+- `docs/README.md`
+  - 제품 범위, 아키텍처, 현재 구현 상태, CDVN runtime automation, inventory, secret, Web3Signer/KMS, approval/audit, observability, bring-up runbook, 공개 저장소 안전 체크를 통합한 단일 운영 문서
+- `docs/local-runtime-test.md`
+  - 실제 DKG artifact 없이 로컬에서 operator-local render/stage/verify와 rollout exclude 경계를 검증하는 smoke test runbook
+- `docs/sole-ownership-and-key-control-draft.md`
+  - Safe 기반 단독 소유권 입증, 3-of-4 signer governance, Obol DKG 세레머니, key share 노출 통제, 단일 위치 재조합 부존재 입증을 위한 제출용 문서 초안
+- `AGENTS.md`
+  - Harness Engineering, Codex, 구현 에이전트에게 전달할 작업 원칙과 제약
 - `CONTRIBUTING.md`
   - 공개 저장소 기여 방식, 문서 동기화 기준, public-safe contribution 원칙
 - `SECURITY.md`
   - 보안 취약점 보고 방식과 secret / runtime artifact 공개 금지 정책
 - `LICENSE`
   - 공개 저장소 배포와 기여를 위한 라이선스 파일
-- `docs/reading-order.md`
-  - 이 레포 문서를 어떤 순서로 읽으면 되는지 정리한 문서 읽기 안내서
-- `AGENTS.md`
-  - Harness Engineering, Codex, 구현 에이전트에게 전달할 작업 원칙과 제약
-- `docs/product-spec.md`
-  - 제품 목표, 사용자, 핵심 기능, 범위 정의
-- `docs/repo-guide.md`
-  - 이 레포가 실제로 무엇이고 지금 어디까지 구현됐는지 설명하는 안내서
-- `docs/beginner-guide.md`
-  - 초보자 기준으로 이 레포가 왜 존재하는지, 무엇을 하고, 어떻게 써야 하는지 설명하는 입문 문서
-- `docs/system-diagrams.md`
-  - 이 레포의 구조, runtime 배포 흐름, 승인 경계를 그림 중심으로 설명하는 다이어그램 문서
-- `docs/dvt-cluster-walkthrough.md`
-  - 운영자가 신규 DVT cluster를 준비해서 validating까지 올리는 실제 예시 시나리오 문서
-- `docs/runtime-inventory-guide.md`
-  - 실제 `cluster.yml`, `hosts.yml`를 어떤 기준으로 채워야 하는지 설명하는 inventory 준비 문서
-- `docs/runtime-secrets-guide.md`
-  - host secret 경로, JWT, cert/key/CA, `.charon` allowlist 경계를 설명하는 secret 준비 문서
-- `docs/web3signer-kms-guide.md`
-  - Web3Signer + KMS 실연동 전에 무엇을 확정해야 하는지 정리한 운영 문서
-- `docs/approval-audit-guide.md`
-  - artifact stage approval, rollout approval, audit 보관 방식을 설명하는 운영 문서
-- `docs/observability-alerting-guide.md`
-  - Prometheus/Loki/Tempo/health-sync/alert routing 운영 결정을 정리하는 문서
-- `docs/bring-up-checklist.md`
-  - 신규 cluster bring-up 때 실제로 체크해야 할 단계별 runbook
-- `docs/publish-safety-checklist.md`
-  - 이 레포를 공개 GitHub 저장소로 운영할 때 필요한 보안 경계와 공개 전 점검 체크리스트
-- `docs/architecture.md`
-  - 시스템 아키텍처, 서비스 경계, 데이터 흐름, 보안 원칙
-- `docs/cdvn-baseline.md`
-  - Obol CDVN baseline 채택 범위와 overlay 커스터마이징 원칙
-- `docs/cdvn-artifact-staging.md`
-  - approved DKG / `.charon` artifact를 rendered runtime에 stage 하는 절차와 안전 경계
-- `docs/cdvn-runtime-handoff.md`
-  - 현재 `infra/obol-cdvn` runtime automation 상태와 다음 작업 handoff
-- `docs/repo-bootstrap.md`
-  - 초기 레포 구조, 기술 스택, 개발 순서, 환경 분리 전략
-- `docs/harness-bootstrap.md`
-  - Harness Engineering으로 레포를 실제 생성할 때 바로 사용할 입력 가이드
 
 ## 현재 구현 상태
 
@@ -86,7 +54,7 @@
 - `infra/obol-cdvn`
   - `v1.9.5` pinned baseline mirror, `web3signer` / `observability` overlay, inventory 예시, `render/stage/verify/rollout/preflight/execute/drift-check/health-sync` 스크립트
 
-자세한 현재 상태는 `docs/repo-guide.md`, runtime 세부 handoff는 `docs/cdvn-runtime-handoff.md`를 기준으로 본다.
+자세한 현재 상태와 runtime 세부 handoff는 `docs/README.md`를 기준으로 본다.
 
 ## 빠른 시작
 

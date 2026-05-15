@@ -354,6 +354,28 @@ load_host_record() {
   HOST_DEPLOYMENT_PATH="${HOST_DEPLOYMENT_PATHS[$index]}"
 }
 
+load_host_config() {
+  local file="$1"
+
+  HOST_NAME="$(read_yaml_scalar "$file" "name")"
+  HOST_ADDRESS="$(read_yaml_scalar "$file" "address")"
+  HOST_ROLE="$(read_yaml_scalar "$file" "role")"
+  HOST_PROFILE="$(read_yaml_scalar "$file" "profile")"
+  HOST_REGION="$(read_yaml_scalar "$file" "region")"
+  HOST_NICKNAME="$(read_yaml_scalar "$file" "nickname")"
+  HOST_EXTERNAL_HOSTNAME="$(read_yaml_scalar "$file" "charonExternalHostname")"
+  HOST_MONITORING_PEER="$(read_yaml_scalar "$file" "monitoringPeer")"
+  HOST_GRAFANA_PORT="$(read_yaml_scalar "$file" "grafanaPort")"
+  HOST_PROMETHEUS_PORT="$(read_yaml_scalar "$file" "prometheusPort")"
+  HOST_SSH_USER="$(read_yaml_scalar "$file" "sshUser")"
+  HOST_DEPLOYMENT_PATH="$(read_yaml_scalar "$file" "deploymentPath")"
+
+  [ -n "${HOST_NAME}" ] || {
+    echo "Host file must include host.name using the example two-space YAML indentation: ${file}" >&2
+    exit 1
+  }
+}
+
 render_host_runtime_dir() {
   local render_dir="$1"
   local host_name="$2"
@@ -370,6 +392,68 @@ render_host_env_file() {
   local render_dir="$1"
   local host_name="$2"
   printf '%s/.env' "$(render_host_runtime_dir "${render_dir}" "${host_name}")"
+}
+
+runtime_metadata_file() {
+  local runtime_dir="$1"
+  printf '%s/render-metadata.env' "${runtime_dir}"
+}
+
+runtime_env_file() {
+  local runtime_dir="$1"
+  printf '%s/.env' "${runtime_dir}"
+}
+
+resolve_runtime_dir_arg() {
+  local render_or_runtime_dir="$1"
+  local host_name="${2:-}"
+
+  if [ -d "${render_or_runtime_dir}/hosts" ]; then
+    [ -n "${host_name}" ] || {
+      echo "--host-name is required when --render-dir points to a cluster bundle." >&2
+      return 1
+    }
+    require_rendered_host "${render_or_runtime_dir}" "${host_name}"
+    render_host_runtime_dir "${render_or_runtime_dir}" "${host_name}"
+    return 0
+  fi
+
+  if [ ! -d "${render_or_runtime_dir}" ]; then
+    echo "Runtime dir not found: ${render_or_runtime_dir}" >&2
+    return 1
+  fi
+
+  if [ ! -f "${render_or_runtime_dir}/render-metadata.env" ]; then
+    echo "Render metadata not found: ${render_or_runtime_dir}/render-metadata.env" >&2
+    return 1
+  fi
+
+  printf '%s' "${render_or_runtime_dir}"
+}
+
+resolve_host_name_arg() {
+  local runtime_dir="$1"
+  local explicit_host_name="${2:-}"
+  local metadata_host_name
+
+  metadata_host_name="$(read_env_value "${runtime_dir}/render-metadata.env" "HOST_NAME")"
+  if [ -n "${explicit_host_name}" ] && [ -n "${metadata_host_name}" ] && [ "${explicit_host_name}" != "${metadata_host_name}" ]; then
+    echo "Host name mismatch: ${explicit_host_name} != metadata ${metadata_host_name}" >&2
+    return 1
+  fi
+
+  if [ -n "${explicit_host_name}" ]; then
+    printf '%s' "${explicit_host_name}"
+    return 0
+  fi
+
+  if [ -n "${metadata_host_name}" ]; then
+    printf '%s' "${metadata_host_name}"
+    return 0
+  fi
+
+  echo "Host name is required or must be present in render-metadata.env." >&2
+  return 1
 }
 
 require_rendered_host() {

@@ -12,19 +12,12 @@
 
 기여 전에 아래 문서를 먼저 보는 것을 권장한다.
 
-1. `docs/reading-order.md`
-2. `docs/beginner-guide.md`
-3. `docs/repo-guide.md`
-4. `docs/cdvn-runtime-handoff.md`
-5. `docs/publish-safety-checklist.md`
+1. `docs/README.md`
+2. `AGENTS.md`
+3. `SECURITY.md`
 
-runtime automation이나 운영 경계를 만지는 경우에는 아래도 같이 본다.
-
-- `docs/runtime-inventory-guide.md`
-- `docs/runtime-secrets-guide.md`
-- `docs/web3signer-kms-guide.md`
-- `docs/approval-audit-guide.md`
-- `docs/bring-up-checklist.md`
+runtime automation, 운영 경계, approval/audit, public repo safety를 만지는 경우에도
+source of truth는 `docs/README.md`다.
 
 ## 기여 범위
 
@@ -81,8 +74,8 @@ pnpm db:seed
 ### 문서 변경
 
 - 기존 문서와 용어를 맞춘다.
-- 같은 내용이 여러 문서에 있으면 `docs/reading-order.md` 또는 source of truth를 기준으로 싱크를 맞춘다.
-- 운영 경계가 바뀌면 `docs/cdvn-runtime-handoff.md`도 같이 갱신한다.
+- `docs/README.md`를 source of truth로 유지한다.
+- 운영 경계가 바뀌면 `docs/README.md`의 안전 계약, approval/audit, bring-up runbook도 같이 갱신한다.
 
 ### 앱 / 패키지 변경
 
@@ -110,9 +103,7 @@ pnpm db:seed
 주로 같이 확인할 문서는 아래다.
 
 - `README.md`
-- `docs/reading-order.md`
-- `docs/repo-guide.md`
-- `docs/cdvn-runtime-handoff.md`
+- `docs/README.md`
 
 ## 공개 저장소 안전 점검
 
@@ -132,7 +123,7 @@ scripts/check-public-repo-safety.sh
 - `jwt.hex`
 - cert / key / CA
 
-자세한 기준은 `docs/publish-safety-checklist.md`를 본다.
+자세한 기준은 `docs/README.md`의 공개 저장소 안전 체크를 본다.
 
 ## Pull Request 가이드
 

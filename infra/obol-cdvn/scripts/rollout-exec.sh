@@ -9,10 +9,11 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  rollout-exec.sh --render-dir <path> --host-name <name> --approval-file <path> [--ssh-target <user@host>] [--deployment-path <path>] [--local] [--skip-pull] [--skip-up] [--skip-health-check] [--execute]
+  rollout-exec.sh --render-dir <bundle-or-runtime-path> [--host-name <name>] --approval-file <path> [--ssh-target <user@host>] [--deployment-path <path>] [--local] [--skip-pull] [--skip-up] [--skip-health-check] [--execute]
 
 Examples:
   ./rollout-exec.sh --render-dir /tmp/cdvn-bundle --host-name operator-1 --approval-file ./rollout-approval.example.env
+  ./rollout-exec.sh --render-dir /tmp/cdvn-operator-1-runtime --approval-file ./rollout-approval.example.env --local
   ./rollout-exec.sh --render-dir /tmp/cdvn-bundle --host-name operator-1 --approval-file ./approval.env --ssh-target ubuntu@203.0.113.11 --execute
 EOF
 }
@@ -83,12 +84,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "${RENDER_DIR}" ] || { usage >&2; exit 1; }
-[ -n "${HOST_NAME}" ] || { usage >&2; exit 1; }
 [ -n "${APPROVAL_FILE}" ] || { usage >&2; exit 1; }
 
-require_rendered_host "${RENDER_DIR}" "${HOST_NAME}"
-
-METADATA_FILE="$(render_host_metadata_file "${RENDER_DIR}" "${HOST_NAME}")"
+HOST_RUNTIME_DIR="$(resolve_runtime_dir_arg "${RENDER_DIR}" "${HOST_NAME}")" || exit 1
+HOST_NAME="$(resolve_host_name_arg "${HOST_RUNTIME_DIR}" "${HOST_NAME}")" || exit 1
+METADATA_FILE="$(runtime_metadata_file "${HOST_RUNTIME_DIR}")"
 validate_rollout_approval "${APPROVAL_FILE}" "${METADATA_FILE}" "${HOST_NAME}"
 
 if [ -z "${DEPLOYMENT_PATH}" ]; then

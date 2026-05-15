@@ -9,11 +9,12 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  verify.sh --render-dir <path> [--host-name <name>]
+  verify.sh --render-dir <bundle-or-runtime-path> [--host-name <name>]
 
 Examples:
   ./verify.sh --render-dir /tmp/cdvn-bundle
   ./verify.sh --render-dir /tmp/cdvn-bundle --host-name operator-1
+  ./verify.sh --render-dir /opt/obol/cluster-a
 EOF
 }
 
@@ -103,7 +104,7 @@ verify_runtime_dir() {
       echo "WEB3SIGNER_URL missing in ${env_file}" >&2
       FAILURES=$((FAILURES + 1))
     fi
-    if [ "${web3signer_fetch}" = "false" ] && ! grep -q '^WEB3SIGNER_PUBLIC_KEYS=' "${env_file}"; then
+    if [ "${web3signer_fetch}" = "false" ] && [ -f "${stage_env}" ] && ! grep -q '^WEB3SIGNER_PUBLIC_KEYS=' "${env_file}"; then
       echo "WEB3SIGNER_PUBLIC_KEYS missing in ${env_file} while WEB3SIGNER_FETCH=false" >&2
       FAILURES=$((FAILURES + 1))
     fi

@@ -12,8 +12,10 @@
 
 - `cluster.example.yml`
   - cluster 단위 공통 설정 예시
+- `operator-1.local.example.yml`
+  - operator 하나가 자기 host-local runtime을 render할 때 쓰는 단일 host manifest 예시
 - `hosts.example.yml`
-  - host별 주소, profile, peer 관련 설정 예시
+  - 로컬 smoke test나 전체 bundle 검토용 host 목록 예시
 
 필드 가이드:
 

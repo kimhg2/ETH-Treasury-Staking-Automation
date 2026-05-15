@@ -9,10 +9,11 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  host-preflight.sh --render-dir <path> --host-name <name> [--ssh-target <user@host>] [--deployment-path <path>] [--required-file <path>]... [--min-disk-gb <n>] [--check-web3signer] [--local] [--execute]
+  host-preflight.sh --render-dir <bundle-or-runtime-path> [--host-name <name>] [--ssh-target <user@host>] [--deployment-path <path>] [--required-file <path>]... [--min-disk-gb <n>] [--check-web3signer] [--local] [--execute]
 
 Examples:
   ./host-preflight.sh --render-dir /tmp/cdvn-bundle --host-name operator-1
+  ./host-preflight.sh --render-dir /tmp/cdvn-operator-1-runtime --local
   ./host-preflight.sh --render-dir /tmp/cdvn-bundle --host-name operator-1 --ssh-target ubuntu@203.0.113.11 --execute
   ./host-preflight.sh --render-dir /tmp/cdvn-bundle --host-name operator-1 --local --execute
 EOF
@@ -81,7 +82,6 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "${RENDER_DIR}" ] || { usage >&2; exit 1; }
-[ -n "${HOST_NAME}" ] || { usage >&2; exit 1; }
 
 case "${MIN_DISK_GB}" in
   ""|*[!0-9]*)
@@ -90,10 +90,10 @@ case "${MIN_DISK_GB}" in
     ;;
 esac
 
-require_rendered_host "${RENDER_DIR}" "${HOST_NAME}"
-
-METADATA_FILE="$(render_host_metadata_file "${RENDER_DIR}" "${HOST_NAME}")"
-ENV_FILE="$(render_host_env_file "${RENDER_DIR}" "${HOST_NAME}")"
+HOST_RUNTIME_DIR="$(resolve_runtime_dir_arg "${RENDER_DIR}" "${HOST_NAME}")" || exit 1
+HOST_NAME="$(resolve_host_name_arg "${HOST_RUNTIME_DIR}" "${HOST_NAME}")" || exit 1
+METADATA_FILE="$(runtime_metadata_file "${HOST_RUNTIME_DIR}")"
+ENV_FILE="$(runtime_env_file "${HOST_RUNTIME_DIR}")"
 
 if [ -z "${DEPLOYMENT_PATH}" ]; then
   DEPLOYMENT_PATH="$(read_env_value "${METADATA_FILE}" "DEPLOYMENT_PATH")"

@@ -10,10 +10,12 @@ usage() {
   cat <<'EOF'
 Usage:
   render.sh --network <mainnet|hoodi> --output-dir <path> [--overlay-profiles <csv>] [--force]
+  render.sh --cluster-file <path> --host-file <path> --output-dir <runtime-path> [--overlay-profiles <csv>] [--force]
   render.sh --cluster-file <path> --hosts-file <path> --output-dir <path> [--host-name <name>] [--overlay-profiles <csv>] [--force]
 
 Examples:
   ./render.sh --network mainnet --output-dir /tmp/cdvn-mainnet --overlay-profiles web3signer
+  ./render.sh --cluster-file ../inventory/cluster.example.yml --host-file ../inventory/operator-1.local.example.yml --output-dir /tmp/cdvn-operator-1-runtime --force
   ./render.sh --cluster-file ../inventory/cluster.example.yml --hosts-file ../inventory/hosts.example.yml --output-dir /tmp/cdvn-bundle --force
 EOF
 }
@@ -21,6 +23,7 @@ EOF
 NETWORK=""
 OUTPUT_DIR=""
 CLUSTER_FILE=""
+HOST_FILE=""
 HOSTS_FILE=""
 HOST_NAME_FILTER=""
 OVERLAY_PROFILES_ARG=""
@@ -38,6 +41,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --cluster-file)
       CLUSTER_FILE="${2:-}"
+      shift 2
+      ;;
+    --host-file)
+      HOST_FILE="${2:-}"
       shift 2
       ;;
     --hosts-file)
@@ -100,10 +107,15 @@ prepare_runtime_dir() {
   local env_sample_file="$2"
 
   mkdir -p "${runtime_dir}"
-  rsync -a --delete "${UPSTREAM_DIR}/" "${runtime_dir}/"
+  rsync -a --delete \
+    --exclude data/ \
+    --exclude .charon/ \
+    --exclude jwt/jwt.hex \
+    --exclude charon-artifacts-staging.env \
+    --exclude validator-pubkeys.txt \
+    "${UPSTREAM_DIR}/" "${runtime_dir}/"
   cp "${env_sample_file}" "${runtime_dir}/.env"
 
-  rm -f "${runtime_dir}/jwt/jwt.hex"
   mkdir -p "${runtime_dir}/jwt" "${runtime_dir}/.charon" "${runtime_dir}/data"
 }
 
@@ -178,10 +190,10 @@ CLUSTER_NAME=${RUNTIME_CLUSTER_NAME}
 HOST_NAME=${RUNTIME_HOST_NAME}
 OVERLAY_PROFILES=${overlay_profiles}
 
-This output is safe to review, but not ready to deploy until:
+This output is safe to review and roll out as a base runtime, but not ready for validator operation until:
 1. A fresh jwt/jwt.hex is generated on the deployment target.
-2. Approved .charon artifacts are staged outside source control with stage-charon-artifacts.sh.
-3. The selected overlays are verified against the host runtime before rollout.
+2. The selected overlays are verified against the rendered runtime before rollout.
+3. Approved .charon artifacts are staged on the operator host after rollout with stage-charon-artifacts.sh --runtime-dir.
 EOF
 
   cat > "${runtime_dir}/OVERLAY_TODO.md" <<EOF
@@ -189,13 +201,13 @@ EOF
 
 Selected overlays: ${overlay_profiles}
 
-Required next steps before rollout:
+Required next steps before validating:
 
-1. Stage approved .charon artifacts with stage-charon-artifacts.sh without copying validator key raw material into this repo.
-2. Verify Web3Signer reachability and remote signer pubkey visibility.
-3. Verify Prometheus, Loki, Tempo, and alert routing from the rendered host.
-4. Generate jwt/jwt.hex on the deployment target.
-5. Run verify.sh and obtain an approval manifest before rollout.
+1. Run verify.sh against the rendered runtime and obtain a rollout approval manifest.
+2. Roll out the rendered runtime without .charon artifacts.
+3. Generate jwt/jwt.hex on the deployment target.
+4. Stage approved .charon artifacts on the operator host with stage-charon-artifacts.sh --runtime-dir.
+5. Verify Web3Signer reachability, remote signer pubkey visibility, Prometheus, Loki, Tempo, and alert routing from the deployed host.
 EOF
 
   cat > "${metadata_file}" <<EOF
@@ -264,13 +276,28 @@ if [ -n "${CLUSTER_FILE}" ]; then
     echo "Cluster file not found: ${CLUSTER_FILE}" >&2
     exit 1
   fi
-  if [ ! -f "${HOSTS_FILE}" ]; then
+  if [ -n "${HOST_FILE}" ] && [ -n "${HOSTS_FILE}" ]; then
+    echo "Use either --host-file for operator-local render or --hosts-file for cluster bundle render, not both." >&2
+    exit 1
+  fi
+  if [ -n "${HOST_FILE}" ] && [ -n "${HOST_NAME_FILTER}" ]; then
+    echo "--host-name is only valid with --hosts-file. Put the operator identity in --host-file instead." >&2
+    exit 1
+  fi
+  if [ -z "${HOST_FILE}" ] && [ -z "${HOSTS_FILE}" ]; then
+    echo "Cluster render requires either --host-file or --hosts-file." >&2
+    exit 1
+  fi
+  if [ -n "${HOSTS_FILE}" ] && [ ! -f "${HOSTS_FILE}" ]; then
     echo "Hosts file not found: ${HOSTS_FILE}" >&2
+    exit 1
+  fi
+  if [ -n "${HOST_FILE}" ] && [ ! -f "${HOST_FILE}" ]; then
+    echo "Host file not found: ${HOST_FILE}" >&2
     exit 1
   fi
 
   load_cluster_config "${CLUSTER_FILE}"
-  parse_hosts_file "${HOSTS_FILE}"
 
   [ -n "${NETWORK}" ] || NETWORK="${CLUSTER_NETWORK}"
   [ -n "${NETWORK}" ] || { echo "Cluster render requires a network value." >&2; exit 1; }
@@ -292,6 +319,41 @@ if [ -n "${CLUSTER_FILE}" ]; then
     echo "Unsupported network '${NETWORK}'. Expected env sample at ${ENV_SAMPLE_FILE}." >&2
     exit 1
   fi
+
+  if [ -n "${HOST_FILE}" ]; then
+    load_host_config "${HOST_FILE}"
+
+    RUNTIME_CLUSTER_NAME="${CLUSTER_MONITORING_NAME}"
+    RUNTIME_NETWORK="${NETWORK}"
+    RUNTIME_HOST_NAME="${HOST_NAME}"
+    RUNTIME_HOST_ADDRESS="${HOST_ADDRESS}"
+    RUNTIME_HOST_REGION="${HOST_REGION}"
+    RUNTIME_CLUSTER_PEER="${HOST_MONITORING_PEER:-${HOST_NAME}}"
+    RUNTIME_CHARON_NICKNAME="${HOST_NICKNAME:-${HOST_NAME}}"
+    RUNTIME_CHARON_EXTERNAL_HOSTNAME="${HOST_EXTERNAL_HOSTNAME:-${HOST_ADDRESS}}"
+    RUNTIME_SERVICE_OWNER="${CLUSTER_SERVICE_OWNER}"
+    RUNTIME_WEB3SIGNER_URL="${CLUSTER_WEB3SIGNER_URL:-http://host.docker.internal:9000}"
+    RUNTIME_WEB3SIGNER_METRICS_TARGET="${CLUSTER_WEB3SIGNER_METRICS_TARGET:-host.docker.internal:9000}"
+    RUNTIME_WEB3SIGNER_FETCH="${CLUSTER_WEB3SIGNER_FETCH}"
+    RUNTIME_WEB3SIGNER_FETCH_INTERVAL_MS="${CLUSTER_WEB3SIGNER_FETCH_INTERVAL_MS}"
+    RUNTIME_FEE_RECIPIENT_ADDRESS="${CLUSTER_FEE_RECIPIENT_ADDRESS:-0x0000000000000000000000000000000000000000}"
+    RUNTIME_HEALTH_SYNC_URL="${CLUSTER_HEALTH_SYNC_URL}"
+    RUNTIME_GRAFANA_PORT="${HOST_GRAFANA_PORT:-3000}"
+    RUNTIME_PROMETHEUS_PORT="${HOST_PROMETHEUS_PORT:-9090}"
+    RUNTIME_DEPLOYMENT_PATH="${HOST_DEPLOYMENT_PATH:-${CLUSTER_DEPLOYMENT_ROOT}}"
+    RUNTIME_APPROVAL_POLICY="${CLUSTER_APPROVAL_POLICY:-rollout}"
+    RUNTIME_SSH_USER="${HOST_SSH_USER}"
+    RUNTIME_SSH_TARGET=""
+    if [ -n "${RUNTIME_SSH_USER}" ] && [ -n "${RUNTIME_HOST_ADDRESS}" ]; then
+      RUNTIME_SSH_TARGET="${RUNTIME_SSH_USER}@${RUNTIME_HOST_ADDRESS}"
+    fi
+
+    render_runtime "${OUTPUT_DIR}" "${OVERLAY_PROFILES}" "${ENV_SAMPLE_FILE}"
+    echo "Rendered operator runtime for ${HOST_NAME} to ${OUTPUT_DIR}"
+    exit 0
+  fi
+
+  parse_hosts_file "${HOSTS_FILE}"
 
   if [ -n "${HOST_NAME_FILTER}" ]; then
     HOST_INDEX="$(find_host_index "${HOST_NAME_FILTER}")" || {

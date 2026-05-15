@@ -1,0 +1,13 @@
+host:
+  name: operator-1
+  address: 127.0.0.1
+  role: dv-operator
+  profile: baseline
+  region: local
+  nickname: treasury-op-1
+  charonExternalHostname: 127.0.0.1
+  monitoringPeer: peer-1
+  grafanaPort: 3301
+  prometheusPort: 9091
+  sshUser: ""
+  deploymentPath: /tmp/cdvn-operator-1-deploy

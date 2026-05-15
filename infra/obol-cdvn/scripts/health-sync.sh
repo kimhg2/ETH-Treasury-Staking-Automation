@@ -9,10 +9,11 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  health-sync.sh --render-dir <path> --host-name <name> [--endpoint-url <url>] [--dry-run]
+  health-sync.sh --render-dir <bundle-or-runtime-path> [--host-name <name>] [--endpoint-url <url>] [--dry-run]
 
 Examples:
   ./health-sync.sh --render-dir /tmp/cdvn-bundle --host-name operator-1 --dry-run
+  ./health-sync.sh --render-dir /opt/obol/cluster-a --dry-run
 EOF
 }
 
@@ -52,9 +53,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "${RENDER_DIR}" ] || { usage >&2; exit 1; }
-[ -n "${HOST_NAME}" ] || { usage >&2; exit 1; }
 
-METADATA_FILE="${RENDER_DIR}/hosts/${HOST_NAME}/runtime/render-metadata.env"
+HOST_RUNTIME_DIR="$(resolve_runtime_dir_arg "${RENDER_DIR}" "${HOST_NAME}")" || exit 1
+HOST_NAME="$(resolve_host_name_arg "${HOST_RUNTIME_DIR}" "${HOST_NAME}")" || exit 1
+METADATA_FILE="$(runtime_metadata_file "${HOST_RUNTIME_DIR}")"
 [ -f "${METADATA_FILE}" ] || { echo "Render metadata not found: ${METADATA_FILE}" >&2; exit 1; }
 
 CLUSTER_NAME="$(read_env_value "${METADATA_FILE}" "CLUSTER_NAME")"
